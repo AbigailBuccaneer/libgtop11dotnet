@@ -22,9 +22,6 @@
 #ifndef __GEMALTO_MINIDRIVER_AUTHENTICATION__
 #define __GEMALTO_MINIDRIVER_AUTHENTICATION__
 
-
-#include <boost/serialization/serialization.hpp>
-#include <boost/serialization/shared_ptr.hpp>
 #include <boost/shared_ptr.hpp>
 #include "MiniDriverPinPolicy.hpp"
 #include "Array.hpp"
@@ -159,36 +156,7 @@ private:
 
     unsigned char m_ucRole;
 
-    // Disk serialization and deserialization
-    friend class boost::serialization::access;
-
-    template< class Archive > void serialize( Archive &ar, const unsigned int /*version*/ ) {
-       
-        //Log::begin( "MiniDriverAuthentication::serialize" );
-
-        ar & m_ucRole;
-
-        ar & m_PinInfoEx;
-
-        ar & m_PinPolicy;
-
-        ar & m_wActiveMode;
-
-        ar & m_ucTypePIN;
-
-        //Log::log( "Role <%ld>", m_ucRole );
-        //Log::logCK_UTF8CHAR_PTR( "PIN info Ex %s", m_PinInfoEx.GetBuffer( ), m_PinInfoEx.GetLength( ) );
-        //m_PinPolicy.print( );
-        //Log::log( "Active mode <%ld>", m_wActiveMode );
-        //Log::log( "PIN type <%ld>", m_ucTypePIN );
-
-        //Log::end( "MiniDriverAuthentication::serialize" );
-    }
-
 };
-
-
-BOOST_CLASS_VERSION( MiniDriverAuthentication, 1 )
 
 
 #endif // __GEMALTO_MINIDRIVER_AUTHENTICATION__

@@ -22,10 +22,6 @@
 #ifndef __GEMALTO_PIN_POLICY__
 #define __GEMALTO_PIN_POLICY__
 
-
-#include <boost/serialization/serialization.hpp>
-#include <boost/serialization/version.hpp>
-#include <boost/serialization/array.hpp>
 #include <boost/array.hpp>
 #include <boost/foreach.hpp>
 #include <memory>
@@ -95,21 +91,6 @@ public:
 
     void print( void );
 
-    friend class boost::serialization::access;
-
-    template< class Archive > void serialize( Archive &ar, const unsigned int /*version*/ ) {
-
-        //Log::begin( "MiniDriverPinPolicy::serialize" );
-
-        ar & m_ucRole;
-
-        ar & m_ucaPinPolicy;
-
-        //Log::log( "Role <%ld>", m_ucRole );
-        //Log::logCK_UTF8CHAR_PTR( "Pin policy", m_ucaPinPolicy.c_array( ), m_ucaPinPolicy.size( ) );
-        //Log::end( "MiniDriverPinPolicy::serialize" );
-    }
-
 protected:
 
     inline void reset( void ) { memset( m_ucaPinPolicy.c_array( ), 0, sizeof( m_ucaPinPolicy ) ); }
@@ -128,8 +109,6 @@ protected:
 
 };
 
-
-BOOST_CLASS_VERSION( MiniDriverPinPolicy, 1 )
 
 
 #endif // __GEMALTO_PIN_POLICY__

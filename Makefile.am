@@ -157,7 +157,7 @@ LIBS = \
     -lboost_thread \
     -lpthread
      
-EXTRA_DIST = autogen.sh c-mac.sh ./docs/LGPL-2.1 ./docs/Release_Notes_Linux.pdf ./docs/PKCS\#11_Libs_.NET_Linux_User_Guide.pdf ./config/Gemalto.NET.PKCS11.ini
+EXTRA_DIST = autogen.sh c-mac.sh ./docs/LGPL-2.1 ./config/Gemalto.NET.PKCS11.ini
 
 # see http://wiki.cacert.org/wiki/Pkcs11TaskForce
 install-exec-hook:

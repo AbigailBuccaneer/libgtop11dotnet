@@ -172,7 +172,7 @@ inline void Slot::tokenCreate( void ) {
 	
 /*
 */
-void Slot::finalize( void ) {
+void Slot::finalize( bool bPcscValid ) {
 
     Log::begin( "Slot::finalize" ); 
 
@@ -182,11 +182,11 @@ void Slot::finalize( void ) {
 
     try {
 
-        closeAllSessions( );
+        closeAllSessions( bPcscValid );
 
         if( m_Device.get( ) ) {
 
-            if( m_Device->isSmartCardPresent( ) ) {
+            if( bPcscValid && m_Device->isSmartCardPresent( ) ) {
 
                 m_Device->logOut( );
 
@@ -510,14 +510,14 @@ void Slot::openSession( const CK_FLAGS& flags, CK_VOID_PTR, CK_NOTIFY, CK_SESSIO
 
 /*
 */
-void Slot::closeAllSessions( void ) {
+void Slot::closeAllSessions( bool bPcscValid ) {
 
     try {
 
         // The user or SO must be desauthenticated
         if( isAuthenticated( ) || administratorIsAuthenticated( ) ) {
         
-            if( m_Device.get( ) && m_Device->isSmartCardPresent( ) ) {
+            if( bPcscValid && m_Device.get( ) && m_Device->isSmartCardPresent( ) ) {
 
                 if( m_Token.get( ) ) {
 
@@ -610,16 +610,21 @@ void Slot::getSessionInfo( const CK_SESSION_HANDLE& a_hSession, CK_SESSION_INFO_
     //// when the smart card was previously logged in by Firefox but is now logged 
     //// out by another application than Firefox:
     //// Check that the user is still logged in
-    if( m_ulUserType == CKU_USER ) {
+    //if( m_ulUserType == CKU_USER ) {
 
-        if ( m_Device.get( ) && !m_Device->isAuthenticated( ) ) {
-        
-            m_ulUserType = CK_UNAVAILABLE_INFORMATION;
+    //    if ( m_Device.get( ) && !m_Device->isAuthenticated( ) ) {
+    //    
+    //        m_ulUserType = CK_UNAVAILABLE_INFORMATION;
 
-            // Update the state of all sessions because write access is no more allowed
-            updateAllSessionsState( );
-        }
-    }
+    //        // Update the state of all sessions because write access is no more allowed
+    //        updateAllSessionsState( );
+    //    }
+    //}
+
+    //        // Update the state of all sessions because write access is no more allowed
+    //        updateAllSessionsState( );
+    //    }
+    //}
 
     a_pInfo->state = s->getState( );
 

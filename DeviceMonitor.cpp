@@ -53,6 +53,7 @@ boost::condition_variable g_WaitForDeviceMonitorThreadCondition;
 
 boost::mutex g_WaitForDeviceMonitorThreadMutex;
 
+extern bool g_bDllUnloading;
 
 /*
 */
@@ -134,22 +135,6 @@ void DeviceMonitor::getDevicesStates( const SCARDCONTEXT& h ) {
         Log::log( "DeviceMonitor::getDevicesStates - SCardGetStatusChange <%#02x>", rv );
     }
 
-    if( ( SCARD_W_REMOVED_CARD == rv ) || ( SCARD_W_RESET_CARD == rv ) ) {
-
-        DWORD dwActiveProtocol = SCARD_PROTOCOL_T0;
-
-        rv = SCardReconnect( h, SCARD_SHARE_SHARED, SCARD_PROTOCOL_T0, SCARD_LEAVE_CARD, &dwActiveProtocol );
-
-        if( SCARD_S_SUCCESS != rv ) {
-
-            Log::log( "DeviceMonitor::getDevicesStates - SCardReconnect <%#02x>", rv );
-
-        } else {
-
-            rv = SCardGetStatusChange( h, 100, &aReaderStates[ 0 ], j );
-        }
-    }
-
     // Create inner device objects
     j = 0;
 
@@ -158,7 +143,7 @@ void DeviceMonitor::getDevicesStates( const SCARDCONTEXT& h ) {
         // If he reader exists
         if( scr.szReader ) {
 
-            scr.dwCurrentState = scr.dwEventState;
+            scr.dwCurrentState = scr.dwEventState & (~SCARD_STATE_CHANGED);
 
             addReader( scr, j );
         }
@@ -233,29 +218,7 @@ void DeviceMonitor::getDevicesList( const SCARDCONTEXT& h, std::vector< std::str
     rv = SCardListReaders( h, NULL, NULL, &dwReaders );
 
     if( SCARD_S_SUCCESS != rv ) {
-
-        if( ( SCARD_W_REMOVED_CARD == rv ) || ( SCARD_W_RESET_CARD == rv ) ) {
-
-            DWORD dwActiveProtocol = 0;
-
-            rv = SCardReconnect( h, SCARD_SHARE_SHARED, SCARD_PROTOCOL_T0, SCARD_LEAVE_CARD, &dwActiveProtocol );
-
-            if( SCARD_S_SUCCESS != rv ) {
-
-                return;
-            }
-
-            rv = SCardListReaders( h, NULL, NULL, &dwReaders );
-
-            if( SCARD_S_SUCCESS != rv ) {
-
-                return;
-            }   
-
-        } else {
-
             return;
-        }
     }
 
     std::auto_ptr< char > pszReaders( new char[ dwReaders ] );
@@ -434,7 +397,6 @@ void DeviceMonitor::addReader( const SCARD_READERSTATE& a_State, const unsigned 
         }
     }
 }
-
 
 /*
 */
@@ -821,8 +783,9 @@ void DeviceMonitor::start( void ) {
 
     if( SCARD_S_SUCCESS != hResult ) {
 
+        Log::log( "DeviceMonitor::start - SCardEstablishContext failed with error 0x%.8X" , hResult);
         //throw std::exception( );
-        return;
+        //return;
     }
 
     // Establish the list of the connected devices
@@ -876,35 +839,54 @@ void DeviceMonitor::stop( void ) {
     //unblockWaitingThread( );
     g_WaitForSlotEventCondition.notify_all( );
 
-    Log::log( "DeviceMonitor::stop - Wait for event thread unblocked" );
+    if (DeviceMonitor::m_bAlive)
+    {
 
-    long rv = SCardCancel( m_hContext );
-    Log::log( "DeviceMonitor::stop - SCardCancel <%#02x>", rv );
+        Log::log( "DeviceMonitor::stop - Wait for event thread unblocked" );
 
-    m_bStopPolling = true;
-    //Log::log( "DeviceMonitor::stop - m_bStopPolling <%#02x>", m_bStopPolling );
+        if (m_hContext)
+        {
+            LONG rv = SCardCancel( m_hContext );
+            Log::log( "DeviceMonitor::stop - SCardCancel <%#02x>", rv );
+        }
 
-    Log::log( "DeviceMonitor::stop - bAlive <%#02x>", DeviceMonitor::m_bAlive );
+        m_bStopPolling = true;
 
-    if( DeviceMonitor::m_bAlive ) {
+        //Log::log( "DeviceMonitor::stop - m_bStopPolling <%#02x>", m_bStopPolling );
 
-        Log::log( "DeviceMonitor::stop - Waiting the thread stops..." );
-        Timer t;
-        t.start( );
+        Log::log( "DeviceMonitor::stop - bAlive <%#02x>", DeviceMonitor::m_bAlive );
 
-        unsigned int i = 0;
+        if( DeviceMonitor::m_bAlive ) {
 
-        do {
+            if (g_bDllUnloading)
+            {
+                Log::log( "DeviceMonitor::stop - Library unloading, not waiting!!" );
+            }
+            else
+            {
+                Log::log( "DeviceMonitor::stop - Waiting the thread stops..." );
+                Timer t;
+                t.start( );
 
-            boost::this_thread::sleep( boost::posix_time::milliseconds( 100 ) );
+                unsigned int i = 0;
 
-            Log::log( "DeviceMonitor::stop - DeviceMonitor::m_bAlive <%d> - i <%ld>", DeviceMonitor::m_bAlive, i );
+                do {
 
-            i+= 100;
+                    boost::this_thread::sleep( boost::posix_time::milliseconds( 100 ) );
 
-        } while( DeviceMonitor::m_bAlive && ( i < 2000 ) );
+                    Log::log( "DeviceMonitor::stop - DeviceMonitor::m_bAlive <%d> - i <%ld>", DeviceMonitor::m_bAlive, i );
 
-        t.stop( "DeviceMonitor::stop - Thread stopped" );
+                    i+= 100;
+
+                } while( DeviceMonitor::m_bAlive && ( i < 2000 ) );
+
+                t.stop( "DeviceMonitor::stop - Thread stopped" );
+            }
+        }
+    }
+    else
+    {
+        Log::log( "DeviceMonitor::stop - thread already stopped" );
     }
 
     Log::end( "DeviceMonitor::stop" );
@@ -978,25 +960,76 @@ void DeviceMonitor::monitorReaderEvent( void ) {
                 break;
             }
 
-            Log::log( "DeviceMonitor::monitorReaderEvent - Query new card/reader status for:" );
-            for( size_t i = 0 ; i < uiReaderStatesLen ; ++i ) {
-                
-                if( aReaderStates[ i ].szReader ) {
-
-                    Log::log( "DeviceMonitor::monitorReaderEvent -      <%s>", aReaderStates[ i ].szReader );
-                }
-            }
-
-            // Query the status for all known devices plus the Plug&Play notification
             long rv;
-            try {
-                rv = SCardGetStatusChange( DeviceMonitor::m_hContext, INFINITE, aReaderStates, dwReaderStatesCount );
+            if (!DeviceMonitor::m_hContext)
+            {
+                Log::log( "DeviceMonitor::monitorReaderEvent - waiting for PC/SC to start" );
+                // Initialize the PCSC context    
+                LONG hResult;
+                do {
+                    hResult = SCardEstablishContext( SCARD_SCOPE_USER, NULL, NULL, &DeviceMonitor::m_hContext );
+                    if (hResult != SCARD_S_SUCCESS)
+#ifdef WIN32
+                        Sleep(500);
+#else
+                        usleep(500*1000);
+#endif
+                    else
+                    {
+                        Log::log( "DeviceMonitor::monitorReaderEvent - PCSC started" );
+
+                        vDevices.clear( );
+
+                        memset( &aReaderStates[ 0 ], 0, sizeof( aReaderStates ) );
+
+                        aReaderStates[ 0 ].szReader = PNP_NOTIFICATION.c_str( );
+                        aReaderStates[ 0 ].dwEventState = SCARD_STATE_CHANGED;
+
+                        dwReaderStatesCount = 1;
+
+                        break;
+                    }                    
+                } while (!DeviceMonitor::m_bStopPolling);
+
+                if (g_bDllUnloading)
+                    return;
+
+                rv = SCARD_S_SUCCESS;
             }
-            catch( ... ) { }
+            else
+            {
+                Log::log( "DeviceMonitor::monitorReaderEvent - Query new card/reader status for:" );
+                for( size_t i = 0 ; i < uiReaderStatesLen ; ++i ) {
+                
+                    if( aReaderStates[ i ].szReader ) {
 
-            boost::mutex::scoped_lock lock( io_mutex );
+                        Log::log( "DeviceMonitor::monitorReaderEvent -      <%s>", aReaderStates[ i ].szReader );
+                    }
+                }
 
+                // Query the status for all known devices plus the Plug&Play notification
+                try {
+                    rv = SCardGetStatusChange( DeviceMonitor::m_hContext, INFINITE, aReaderStates, dwReaderStatesCount );
+                }
+                catch( ... ) { }
+            }
+
+            if (g_bDllUnloading)
+                return;
+
+#ifdef _WIN32
+            char szDateTimeUTC[260];
+            SYSTEMTIME stNow;
+
+            GetSystemTime(&stNow);
+	        sprintf(szDateTimeUTC,"%04d-%02d-%02d %02d:%02d:%02d.%d(UTC)",
+		        stNow.wYear,stNow.wMonth,stNow.wDay,stNow.wHour,stNow.wMinute,stNow.wSecond,stNow.wMilliseconds);
+
+	        Log::log( "DeviceMonitor::monitorReaderEvent - SCardGetStatusChange  <%#02x> [%s]", rv, szDateTimeUTC);
+#else
             Log::log( "DeviceMonitor::monitorReaderEvent - SCardGetStatusChange  <%#02x>", rv );
+#endif
+            
 
             if ( DeviceMonitor::m_bStopPolling ) {
 
@@ -1007,22 +1040,28 @@ void DeviceMonitor::monitorReaderEvent( void ) {
 
             // Check if the get status action has been canceled or failed
             if( SCARD_E_CANCELLED == rv ) {
+                
+                if (g_bDllUnloading)
+                    return;
 
                 Log::log( "DeviceMonitor::monitorReaderEvent - SCardGetStatusChange cancelled <%#02x>", rv );
                 break;
 
-            } else if( ( SCARD_W_REMOVED_CARD == rv ) || ( SCARD_W_RESET_CARD == rv ) ) {
+            }
+            else if ( (SCARD_E_SYSTEM_CANCELLED == rv) || (SCARD_E_NO_SERVICE == rv))
+            {
+                boost::mutex::scoped_lock lock( io_mutex );
+                Log::log( "DeviceMonitor::monitorReaderEvent - SCardGetStatusChange failed <%#02x>. Removing all tokens", rv );
+                BOOST_FOREACH( SCARD_READERSTATE& rs, aReaderStates ) {
 
-                DWORD dwActiveProtocol = 0;
-                rv = SCardReconnect( DeviceMonitor::m_hContext, SCARD_SHARE_SHARED, SCARD_PROTOCOL_T0, SCARD_LEAVE_CARD, &dwActiveProtocol );
+                    if( rs.szReader && PNP_NOTIFICATION.compare( rs.szReader ) ) {
+                        // The reader has been removed
+                        notifyListenerReaderRemoved( rs.szReader );
 
-                if( SCARD_S_SUCCESS != rv ) {
-
-                    Log::log( "DeviceMonitor::monitorReaderEvent - SCardReconnect failed <%#02x>", rv );
-                    break;
+                        // Remove the device from the current device list
+                        removeReader( rs.szReader );
+                    }
                 }
-
-                continue;
 
             } else if( SCARD_S_SUCCESS != rv ) {
 
@@ -1033,229 +1072,256 @@ void DeviceMonitor::monitorReaderEvent( void ) {
             if ( m_bStopPolling ) {
 
                 // If the library has been unloaded the thread must stopped right now
+                Log::log( "DeviceMonitor::monitorReaderEvent - Stop polling required after status request" );
                 break;
             }
 
-            // A Plug&Play event occured. A reader has been removed or inserted
-            if( aReaderStates[ 0 ].dwEventState & SCARD_STATE_CHANGED ) {
+            if (SCARD_S_SUCCESS == rv)
+            {
+                boost::mutex::scoped_lock lock( io_mutex );
+#ifdef _WIN32
+                GetSystemTime(&stNow);
+	            sprintf(szDateTimeUTC,"%04d-%02d-%02d %02d:%02d:%02d.%d(UTC)",
+		            stNow.wYear,stNow.wMonth,stNow.wDay,stNow.wHour,stNow.wMinute,stNow.wSecond,stNow.wMilliseconds);
 
-                Log::log( "DeviceMonitor::monitorReaderEvent - Pnp status changed" );
+	            Log::log( "DeviceMonitor::monitorReaderEvent - Starting handling events [%s]", szDateTimeUTC);
+#endif
+                // A Plug&Play event occured. A reader has been removed or inserted
+                if( aReaderStates[ 0 ].dwEventState & SCARD_STATE_CHANGED ) {
 
-                // Get the new device list
-                getDevicesList( m_hContext, vDevices );
+                    Log::log( "DeviceMonitor::monitorReaderEvent - Pnp status changed" );
 
-                Log::log( "DeviceMonitor::monitorReaderEvent - New device list created" );
+                    // Get the new device list
+                    getDevicesList( m_hContext, vDevices );
 
-                if ( m_bStopPolling ) {
+                    Log::log( "DeviceMonitor::monitorReaderEvent - New device list created" );
 
-                    // If the library has been unloaded the thread must stopped right now
-                    Log::log( "DeviceMonitor::monitorReaderEvent - Stop polling required after device list creation" );
-                    break;
-                }
+                    if ( m_bStopPolling ) {
 
-                // First compare the current readers with the new device list to know if the reader has been previously detected
-                bool bFound = false;
-
-                BOOST_FOREACH( SCARD_READERSTATE& rs, aReaderStates ) {
-
-                    if( rs.szReader && PNP_NOTIFICATION.compare( rs.szReader ) ) {
-
-                        Log::log( "DeviceMonitor::monitorReaderEvent - Check removal of reader <%s>", rs.szReader );
-
-                        bFound = false;
-
-                        BOOST_FOREACH( std::string& s, vDevices ) {
-
-                            Log::log( "DeviceMonitor::monitorReaderEvent - Locate removal of reader <%s> compared to <%s>", rs.szReader, s.c_str( ) );
-
-                            if( 0 == s.compare( (LPSTR)( rs.szReader ) ) ) {
-
-                                // The reader is still in use
-                                bFound = true;
-
-                                Log::log( "DeviceMonitor::monitorReaderEvent - Reader <%s> still in use", s.c_str( ) );
-
-                                break;
-                            }
-                        }
-
-                        if( !bFound ) {
-
-                            Log::log( "DeviceMonitor::monitorReaderEvent - Reader <%s> removed", rs.szReader );
-
-                            // The reader has been removed
-                            notifyListenerReaderRemoved( rs.szReader );
-
-                            // Remove the device from the current device list
-                            removeReader( rs.szReader );
-                        }
+                        // If the library has been unloaded the thread must stopped right now
+                        Log::log( "DeviceMonitor::monitorReaderEvent - Stop polling required after device list creation" );
+                        break;
                     }
-                }
 
-                // Second compare the new device list to the old one to know if new devices have been inserted
-                BOOST_FOREACH( std::string& s, vDevices ) {
-
-                    Log::log( "DeviceMonitor::monitorReaderEvent - Locate new reader for reader <%s>", s.c_str( ) );
-
+                    // First compare the current readers with the new device list to know if the reader has been previously detected
                     bool bFound = false;
 
                     BOOST_FOREACH( SCARD_READERSTATE& rs, aReaderStates ) {
 
-                        Log::log( "DeviceMonitor::monitorReaderEvent - Locate new reader for reader <%s> compared to <%s>", s.c_str( ), rs.szReader );
+                        if( rs.szReader && PNP_NOTIFICATION.compare( rs.szReader ) ) {
 
-                        if( rs.szReader && ( 0 == s.compare( (LPSTR)( rs.szReader ) ) ) ) {
+                            Log::log( "DeviceMonitor::monitorReaderEvent - Check removal of reader <%s>", rs.szReader );
 
-                            // The reader is already known
-                            bFound = true;
+                            bFound = false;
 
-                            Log::log( "DeviceMonitor::monitorReaderEvent - Reader <%s> is known", rs.szReader );
+                            BOOST_FOREACH( std::string& s, vDevices ) {
 
-                            break;
-                        }
-                    }	
+                                Log::log( "DeviceMonitor::monitorReaderEvent - Locate removal of reader <%s> compared to <%s>", rs.szReader, s.c_str( ) );
 
-                    if( !bFound ) {
+                                if( 0 == s.compare( (LPSTR)( rs.szReader ) ) ) {
 
-                        Log::log( "DeviceMonitor::monitorReaderEvent - Found new reader <%s>", s.c_str( ) );
+                                    // The reader is still in use
+                                    bFound = true;
 
-                        // The reader is unknown. Add the new reader into the current device list
-                        addReader( m_hContext, s ); 
+                                    Log::log( "DeviceMonitor::monitorReaderEvent - Reader <%s> still in use", s.c_str( ) );
 
-                        // Notify the insertion
-                        notifyListenerReaderInserted( s );
-                    }
-                }
-            }
+                                    break;
+                                }
+                            }
 
-            // A real change state notification came.
-            // Locate state changes in the current reader list avoiding the first cell which is dedicated to Plug&Play notification declaration
-            BOOST_FOREACH( SCARD_READERSTATE& srs, aReaderStates ) {
+                            if( !bFound ) {
 
-                // Update the state
-                srs.dwCurrentState = srs.dwEventState;
+                                Log::log( "DeviceMonitor::monitorReaderEvent - Reader <%s> removed", rs.szReader );
 
-                if( !srs.szReader ) {
+                                // The reader has been removed
+                                notifyListenerReaderRemoved( rs.szReader );
 
-                    continue;
-                }
-
-                if( !PNP_NOTIFICATION.compare( srs.szReader ) ) {
-
-                    continue;
-                }
-
-                if( SCARD_STATE_CHANGED & srs.dwEventState ) {
-
-                    Log::log( "DeviceMonitor::monitorReaderEvent - Reader <%s> - State changed <%#02x>", srs.szReader, srs.dwEventState );
-
-                    // Get the current registered reader state to compare with the new incoming state
-                    SCARD_READERSTATE scr;
-
-                    memset( &scr, 0, sizeof( SCARD_READERSTATE ) );
-
-                    scr.szReader = srs.szReader;
-
-                    getReader( scr );
-
-                    // If a smart card is present and this is not already the state of the reader
-                    if( ( SCARD_STATE_PRESENT & srs.dwEventState ) && ( 0 == ( SCARD_STATE_PRESENT & scr.dwCurrentState ) ) ) {
-// LCA: remove comment on ATR test!
-                        // !!!!! ONLY NOTIFY IF A .NET SMART CARD IS PRESENT !!!!!
-                        if( ( SCARD_STATE_MUTE != ( SCARD_STATE_MUTE & srs.dwEventState ) ) && ( 0 == memcmp( g_DotNetSmartCardAtr, srs.rgbAtr, srs.cbAtr ) ) ) {
-
-                            Log::log( "DeviceMonitor::monitorReaderEvent - Reader <%s> - .NET Card inserted", srs.szReader );
-
-                            try {
-                                
-                                addSmartCard( srs.szReader );
-
-                                notifyListenerSmartCardInserted( srs.szReader );
-                            
-                            } catch( ... ) {
-                            
-                                // This is not a .NET smart card. Nothing to do.
+                                // Remove the device from the current device list
+                                removeReader( rs.szReader );
                             }
                         }
+                    }
 
-                        // If a smart card been removed and this is not already the state of the reader
-                    } else if( ( SCARD_STATE_EMPTY & srs.dwEventState ) && ( 0 == ( SCARD_STATE_EMPTY & scr.dwCurrentState ) ) ) {
-// LCA: Only notify for .NET card?
-                        bool isDotNetToken = true;
+                    // Second compare the new device list to the old one to know if new devices have been inserted
+                    BOOST_FOREACH( std::string& s, vDevices ) {
 
-                        BOOST_FOREACH( boost::shared_ptr< Device >& d, m_aDevices ) {
+                        Log::log( "DeviceMonitor::monitorReaderEvent - Locate new reader for reader <%s>", s.c_str( ) );
 
-                            // Ignore empty device cell
-                            if( d.get( ) && ( 0 == d->getReaderName( ).compare( srs.szReader ) ) ) {
+                        bool bFound = false;
 
-                                try {
+                        BOOST_FOREACH( SCARD_READERSTATE& rs, aReaderStates ) {
 
-                                    d->getCardModule( );
-                                
-                                } catch (...) {
+                            Log::log( "DeviceMonitor::monitorReaderEvent - Locate new reader for reader <%s> compared to <%s>", s.c_str( ), rs.szReader );
 
-                                    isDotNetToken = false;
-                                }
+                            if( rs.szReader && ( 0 == s.compare( (LPSTR)( rs.szReader ) ) ) ) {
+
+                                // The reader is already known
+                                bFound = true;
+
+                                Log::log( "DeviceMonitor::monitorReaderEvent - Reader <%s> is known", rs.szReader );
 
                                 break;
                             }
-                        }
+                        }	
 
-                        if (isDotNetToken)
-                        {
-                            Log::log( "DeviceMonitor::monitorReaderEvent - Reader <%s> - Card removed", srs.szReader );
+                        if( !bFound ) {
 
-                            // Query the status of the device
-                            if( isReaderExists( m_hContext, srs.szReader ) ) {
+                            Log::log( "DeviceMonitor::monitorReaderEvent - Found new reader <%s>", s.c_str( ) );
 
-                                // The reader exists, only the smart card has been removed
-                                removeSmartCard( srs.szReader );
+                            // The reader is unknown. Add the new reader into the current device list
+                            addReader( m_hContext, s ); 
 
-                                notifyListenerSmartCardRemoved( srs.szReader );
-
-                            } else {
-
-                                // The reader has been removed and also the smart card
-                                notifyListenerReaderRemoved( srs.szReader );
-
-                                // Remove the device from the current device list
-                                removeReader( srs.szReader );
-                            }
+                            // Notify the insertion
+                            notifyListenerReaderInserted( s );
                         }
                     }
                 }
 
-                // Store the reader state
-                updateReader( srs );
-            }
-            Log::log( "DeviceMonitor::monitorReaderEvent - Rebuild the list of readers to poll" );
+                // A real change state notification came.
+                // Locate state changes in the current reader list avoiding the first cell which is dedicated to Plug&Play notification declaration
+                BOOST_FOREACH( SCARD_READERSTATE& srs, aReaderStates ) {
 
-            // Build the new smart card reader state buffer with the plug& play notification query as first cell 
-            dwReaderStatesCount = 1;
+                    // Update the state
+                    DWORD dwOriginalState = srs.dwCurrentState;
+                    srs.dwCurrentState = srs.dwEventState & (~SCARD_STATE_CHANGED);
 
-            //memset( &aReaderStates[ 1 ], 0, sizeof( SCARD_READERSTATE ) * (v g_iMaxReader );
+                    if( !srs.szReader ) {
 
-            //aReaderStates[ 0 ].szReader = /*readerNames[ 0 ];*/ PNP_NOTIFICATION.c_str( );
+                        continue;
+                    }
 
-            BOOST_FOREACH( boost::shared_ptr< Device >& d, m_aDevices ) {
+                    if( !PNP_NOTIFICATION.compare( srs.szReader ) ) {
 
-                memset( &aReaderStates[ dwReaderStatesCount ], 0, sizeof( SCARD_READERSTATE ) );
+                        continue;
+                    }
 
-                // Ignore empty device cell
-                if( d.get( ) && d->getReaderName( ).compare( m_stEmptyDevice ) ) {
+                    if( SCARD_STATE_CHANGED & srs.dwEventState ) {
 
-                    d->put( aReaderStates[ dwReaderStatesCount ] );
+                        Log::log( "DeviceMonitor::monitorReaderEvent - Reader <%s> - State changed from <%#02x> to <%#02x>", srs.szReader, dwOriginalState, srs.dwCurrentState );
+                        
+                        // Get the current registered reader state to compare with the new incoming state
+                        SCARD_READERSTATE scr;
 
-                    Log::log( "DeviceMonitor::monitorReaderEvent - Prepare to poll reader <%s>", aReaderStates[ dwReaderStatesCount ].szReader );
+                        memset( &scr, 0, sizeof( SCARD_READERSTATE ) );
 
-                    //memset( readerNames[ dwReaderStatesCount ], 0,sizeof( readerNames[ dwReaderStatesCount ] ) );
+                        scr.szReader = srs.szReader;
 
-                    //memcpy( readerNames[ dwReaderStatesCount ], d->getReaderName( ).c_str( ), d->getReaderName( ).size( ) );
+                        getReader( scr );
 
-                    //aReaderStates[ dwReaderStatesCount ].szReader = d->getReaderName( ).c_str( ); //readerNames[ dwReaderStatesCount ];
+                        // If a smart card is present and this is not already the state of the reader
+                        if( ( SCARD_STATE_PRESENT & srs.dwEventState ) && ( 0 == ( SCARD_STATE_PRESENT & scr.dwCurrentState ) ) ) {
+    // LCA: remove comment on ATR test!
+                            // !!!!! ONLY NOTIFY IF A .NET SMART CARD IS PRESENT !!!!!
+                            if( ( SCARD_STATE_MUTE != ( SCARD_STATE_MUTE & srs.dwEventState ) ) && ( 0 == memcmp( g_DotNetSmartCardAtr, srs.rgbAtr, srs.cbAtr ) ) ) {
 
-                    ++dwReaderStatesCount;
+                                Log::log( "DeviceMonitor::monitorReaderEvent - Reader <%s> - .NET Card inserted", srs.szReader );
+
+                                try {
+                                
+                                    addSmartCard( srs.szReader );
+
+                                    notifyListenerSmartCardInserted( srs.szReader );
+                            
+                                } catch( ... ) {
+                            
+                                    // This is not a .NET smart card. Nothing to do.
+                                }
+                            }
+
+                            // If a smart card been removed and this is not already the state of the reader
+                        } else if( ( SCARD_STATE_EMPTY & srs.dwEventState ) && ( 0 == ( SCARD_STATE_EMPTY & scr.dwCurrentState ) ) ) {
+    // LCA: Only notify for .NET card?
+                            bool isDotNetToken = true;
+
+                            BOOST_FOREACH( boost::shared_ptr< Device >& d, m_aDevices ) {
+
+                                // Ignore empty device cell
+                                if( d.get( ) && ( 0 == d->getReaderName( ).compare( srs.szReader ) ) ) {
+
+                                    try {
+
+                                        d->getCardModule( );
+                                
+                                    } catch (...) {
+
+                                        isDotNetToken = false;
+                                    }
+
+                                    break;
+                                }
+                            }
+
+                            if (isDotNetToken)
+                            {
+                                Log::log( "DeviceMonitor::monitorReaderEvent - Reader <%s> - Card removed", srs.szReader );
+
+                                // Query the status of the device
+                                if( isReaderExists( m_hContext, srs.szReader ) ) {
+
+                                    // The reader exists, only the smart card has been removed
+                                    removeSmartCard( srs.szReader );
+
+                                    notifyListenerSmartCardRemoved( srs.szReader );
+
+                                } else {
+
+                                    // The reader has been removed and also the smart card
+                                    notifyListenerReaderRemoved( srs.szReader );
+
+                                    // Remove the device from the current device list
+                                    removeReader( srs.szReader );
+                                }
+                            }
+                        }
+                    }
+
+                    // Store the reader state
+                    updateReader( srs );
                 }
+                Log::log( "DeviceMonitor::monitorReaderEvent - Rebuild the list of readers to poll" );
+
+                // Build the new smart card reader state buffer with the plug& play notification query as first cell 
+                dwReaderStatesCount = 1;
+
+                //memset( &aReaderStates[ 1 ], 0, sizeof( SCARD_READERSTATE ) * (v g_iMaxReader );
+
+                //aReaderStates[ 0 ].szReader = /*readerNames[ 0 ];*/ PNP_NOTIFICATION.c_str( );
+
+                BOOST_FOREACH( boost::shared_ptr< Device >& d, m_aDevices ) {
+
+                    memset( &aReaderStates[ dwReaderStatesCount ], 0, sizeof( SCARD_READERSTATE ) );
+
+                    // Ignore empty device cell
+                    if( d.get( ) && d->getReaderName( ).compare( m_stEmptyDevice ) ) {
+
+                        d->put( aReaderStates[ dwReaderStatesCount ] );
+
+                        Log::log( "DeviceMonitor::monitorReaderEvent - Prepare to poll reader <%s>", aReaderStates[ dwReaderStatesCount ].szReader );
+
+                        //memset( readerNames[ dwReaderStatesCount ], 0,sizeof( readerNames[ dwReaderStatesCount ] ) );
+
+                        //memcpy( readerNames[ dwReaderStatesCount ], d->getReaderName( ).c_str( ), d->getReaderName( ).size( ) );
+
+                        //aReaderStates[ dwReaderStatesCount ].szReader = d->getReaderName( ).c_str( ); //readerNames[ dwReaderStatesCount ];
+
+                        ++dwReaderStatesCount;
+                    }
+                }
+
+#ifdef _WIN32
+                GetSystemTime(&stNow);
+	            sprintf(szDateTimeUTC,"%04d-%02d-%02d %02d:%02d:%02d.%d(UTC)",
+		            stNow.wYear,stNow.wMonth,stNow.wDay,stNow.wHour,stNow.wMinute,stNow.wSecond,stNow.wMilliseconds);
+
+	            Log::log( "DeviceMonitor::monitorReaderEvent - End handling events [%s]", szDateTimeUTC);
+#endif
             }
+            else
+            {
+                SCardReleaseContext( DeviceMonitor::m_hContext );
+                DeviceMonitor::m_hContext = 0;
+            }
+
 
             Log::log( "DeviceMonitor::monitorReaderEvent - Ready to poll" );
 
@@ -1268,6 +1334,8 @@ void DeviceMonitor::monitorReaderEvent( void ) {
 
     LONG l = SCardReleaseContext( DeviceMonitor::m_hContext );
     Log::log( "DeviceMonitor::monitorReaderEvent - SCardReleaseContext <%#02x>", l );
+
+    DeviceMonitor::m_hContext = 0;
 
     Log::log( "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[ DEVICE MONITOR THREAD STOPS ]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]\n" );
 

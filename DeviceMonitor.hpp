@@ -73,7 +73,7 @@ public:
 
 	size_t size( ) { return m_aDevices.size( ); }
 
-    	static SCARDCONTEXT m_hContext;
+	static SCARDCONTEXT m_hContext;
 
 	static bool m_bStopPolling;
 

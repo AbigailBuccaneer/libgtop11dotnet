@@ -26,6 +26,7 @@
 #include <boost/serialization/serialization.hpp>
 #include <boost/ptr_container/serialize_ptr_map.hpp>
 #include <boost/shared_ptr.hpp>
+#include <boost/archive/archive_exception.hpp>
 #include "MiniDriverFiles.hpp"
 #include "MiniDriverContainerMapFile.hpp"
 #include "MiniDriverAuthentication.hpp"
@@ -206,15 +207,17 @@ private:
     // Disk serialization and deserialization
     friend class boost::serialization::access;
 
-    template< class Archive > void serialize( Archive &ar, const unsigned int /*version*/ ) {
+    template< class Archive > void serialize( Archive &ar, const unsigned int version ) {
 
         //Log::begin( "MiniDriver::serialize" );
 
+        if (version != 2)
+        {
+            throw boost::archive::archive_exception(boost::archive::archive_exception::unsupported_class_version);
+        }
+
         // Append the files information
         ar & m_Files;
-
-        // Append the authentication information
-        ar & m_Authentication;
 
         //Log::end( "MiniDriver::serialize" );
     }
@@ -222,7 +225,7 @@ private:
 };
 
 
-BOOST_CLASS_VERSION( MiniDriver, 1 )
+BOOST_CLASS_VERSION( MiniDriver, 2 )
 
 
 #endif // __GEMALTO_MINIDRIVER__

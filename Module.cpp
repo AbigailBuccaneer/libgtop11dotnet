@@ -20,16 +20,48 @@
 
 
 #ifdef WIN32
+#define DESCTRUCTOR
+#else
+#define DESCTRUCTOR __attribute__ ((destructor))
+#endif
+
+void DESCTRUCTOR finalizeLibrary(void);
+
+bool g_bDllUnloading = false;
+
+#ifdef WIN32
 
 #include <Windows.h>
 
+HINSTANCE g_hModule = NULL; /**< DLL Instance. */
 
-BOOL APIENTRY DllMain( HANDLE /*hModule*/,
-                       DWORD  /*ul_reason_for_call*/,
+BOOL APIENTRY DllMain( HINSTANCE hModule,
+                       DWORD  ul_reason_for_call,
                        LPVOID /*lpReserved*/
                      )
 {
+    switch(ul_reason_for_call)
+    {
+    case DLL_PROCESS_ATTACH :
+        {
+            g_hModule = hModule;
+        }
+        break;
+    case DLL_PROCESS_DETACH : 
+        {
+            finalizeLibrary();
+        }
+        break;
+    }
     return TRUE;
 }
 
 #endif
+
+extern void pkcs11Finalization(void);
+
+void finalizeLibrary(void)
+{
+    g_bDllUnloading = true;
+    pkcs11Finalization();
+}

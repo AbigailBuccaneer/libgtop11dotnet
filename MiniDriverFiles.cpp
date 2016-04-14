@@ -48,6 +48,8 @@ MiniDriverFiles::MiniDriverFiles( ) {
 	s_stPathSeparator = "\\";
 
 	s_stPathMscp = szBASE_CSP_DIR;
+
+    m_CardModule = NULL;
 }
 
 

@@ -109,7 +109,7 @@ public:
 
 	static bool s_bEnableLog;
 
-	static char s_LogFilePath[ 255 ];
+	static char s_LogFilePath[ 512 ];
 
 private:
 

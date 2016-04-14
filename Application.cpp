@@ -60,6 +60,8 @@ bool IS_BIG_ENDIAN    = (*((unsigned char *)(&endian))) ? false : true;
 
 extern boost::condition_variable g_WaitForSlotEventCondition;
 
+extern bool g_bDllUnloading;
+
 /*
 */
 Application::Application( ) {
@@ -156,14 +158,39 @@ Application::Application( ) {
 	    }
     }
 
-    Log::log( "" );
-    Log::log( "" );
-    Log::log( "######   ######   ######   ######   ######   ######   ######   ######   ######" );
-    Log::log( "######   ######   ######   ######   ######   ######   ######   ######   ######" );
-    Log::log( " PKCS11 STARTS" );
-    Log::log( "######   ######   ######   ######   ######   ######   ######   ######   ######" );
-    Log::log( "######   ######   ######   ######   ######   ######   ######   ######   ######" );
-    Log::log( "" );
+    if( Log::s_bEnableLog ) {        
+        Log::log( "" );
+        Log::log( "" );
+        Log::log( "######   ######   ######   ######   ######   ######   ######   ######   ######" );
+        Log::log( "######   ######   ######   ######   ######   ######   ######   ######   ######" );
+#ifdef _WIN32
+        DWORD dwSessionID = -1;
+        DWORD dwProcessID = GetCurrentProcessId();
+        char szProcessPath[512] = {0};
+        char szDateTimeUTC[260];
+        SYSTEMTIME stNow;
+
+        GetModuleFileName(NULL, szProcessPath, sizeof(szProcessPath));
+        ProcessIdToSessionId(dwProcessID, &dwSessionID);
+
+        GetSystemTime(&stNow);
+        sprintf(szDateTimeUTC,"%04d-%02d-%02d %02d:%02d:%02d.%d(UTC)",
+            stNow.wYear,stNow.wMonth,stNow.wDay,stNow.wHour,stNow.wMinute,stNow.wSecond,stNow.wMilliseconds);
+
+        Log::log( " [%s]", szDateTimeUTC);
+        Log::log( " PKCS11 STARTS - Session ID = %d - Process ID = %d" , dwSessionID, dwProcessID);
+        Log::log( " LOADED BY \"%s\"", szProcessPath);
+#else
+        Log::log( " PKCS11 STARTS" );
+#endif
+        Log::log( "######   ######   ######   ######   ######   ######   ######   ######   ######" );
+        Log::log( "######   ######   ######   ######   ######   ######   ######   ######   ######" );
+        Log::log( "" );
+    }
+
+    DeviceMonitor::m_hContext = 0;
+    DeviceMonitor::m_bStopPolling = false;
+    DeviceMonitor::m_bAlive = false;
 
     m_DeviceMonitor.reset( new DeviceMonitor( ) );
 
@@ -178,6 +205,25 @@ Application::Application( ) {
 */
 Application::~Application( ) {
 
+    if( Log::s_bEnableLog ) {
+        if (g_bDllUnloading)
+        {
+            Log::log( "========================" );
+#ifdef _WIN32
+            char szDateTimeUTC[260];
+            SYSTEMTIME stNow;
+
+            GetSystemTime(&stNow);
+            sprintf(szDateTimeUTC,"%04d-%02d-%02d %02d:%02d:%02d.%d(UTC)",
+                stNow.wYear,stNow.wMonth,stNow.wDay,stNow.wHour,stNow.wMinute,stNow.wSecond,stNow.wMilliseconds);
+            Log::log( " [%s]", szDateTimeUTC);
+#endif
+            Log::log( "PKCS11 Library Unloading" );
+            Log::log( "========================" );
+            Log::log( "" );
+        }
+    }
+
     if( m_DeviceMonitor.get( ) ) {
 
 	    // Remove the application from the PCSC devices listener list
@@ -186,14 +232,26 @@ Application::~Application( ) {
 
     finalize( );
 
-    Log::log( "" );
-    Log::log( "" );
-    Log::log( "######   ######   ######   ######   ######   ######   ######   ######   ######" );
-    Log::log( "######   ######   ######   ######   ######   ######   ######   ######   ######" );
-    Log::log( " PKCS11 STOPS" );
-    Log::log( "######   ######   ######   ######   ######   ######   ######   ######   ######" );
-    Log::log( "######   ######   ######   ######   ######   ######   ######   ######   ######" );
-    Log::log( "" );
+    if( Log::s_bEnableLog ) {
+
+        Log::log( "" );
+        Log::log( "" );
+        Log::log( "######   ######   ######   ######   ######   ######   ######   ######   ######" );
+        Log::log( "######   ######   ######   ######   ######   ######   ######   ######   ######" );
+#ifdef _WIN32
+        char szDateTimeUTC[260];
+        SYSTEMTIME stNow;
+
+        GetSystemTime(&stNow);
+        sprintf(szDateTimeUTC,"%04d-%02d-%02d %02d:%02d:%02d.%d(UTC)",
+            stNow.wYear,stNow.wMonth,stNow.wDay,stNow.wHour,stNow.wMinute,stNow.wSecond,stNow.wMilliseconds);
+        Log::log( " [%s]", szDateTimeUTC);
+#endif
+        Log::log( " PKCS11 STOPS" );
+        Log::log( "######   ######   ######   ######   ######   ######   ######   ######   ######" );
+        Log::log( "######   ######   ######   ######   ######   ######   ######   ######   ######" );
+        Log::log( "" );
+    }
 }
 
 
@@ -567,35 +625,28 @@ void Application::initialize( ) {
 void Application::finalize( void ) {
 
     g_WaitForSlotEventCondition.notify_all( );
-  
-    long rv = SCardIsValidContext( DeviceMonitor::m_hContext );
 
+    bool bPcscValid = (DeviceMonitor::m_hContext && (SCARD_S_SUCCESS == SCardIsValidContext(DeviceMonitor::m_hContext)));
 
-    if( SCARD_S_SUCCESS == rv ) {
-
-        // Call the finalize method for all managed device
-	    BOOST_FOREACH( boost::shared_ptr< Slot >& s, m_Slots ) {
+    Log::log("Application::finalize : Stopping thread");
+    // Call the finalize method for all managed device
+	BOOST_FOREACH( boost::shared_ptr< Slot >& s, m_Slots ) {
 	
-		    if( s.get( ) ) {
+		if( s.get( ) ) {             
+			s->finalize( bPcscValid );
+		}	
+	}
+       
+  	// Stop the PCSC devices listenening thread
+	if( m_DeviceMonitor.get( ) ) {
 
-               
+        //g_WaitForSlotEventMutex.unlock( );
 
-			    s->finalize( );
-		    }	
-	    }
+        //DeviceMonitor::m_bAlive = false;
 
-        
+        m_DeviceMonitor->stop( );
 
-  	    // Stop the PCSC devices listenening thread
-	    if( m_DeviceMonitor.get( ) ) {
-
-            //g_WaitForSlotEventMutex.unlock( );
-
-            //DeviceMonitor::m_bAlive = false;
-
-            m_DeviceMonitor->stop( );
-
+        if (DeviceMonitor::m_hContext && (SCARD_S_SUCCESS == SCardIsValidContext(DeviceMonitor::m_hContext)))
             SCardReleaseContext( DeviceMonitor::m_hContext );
-        }
     }
 }

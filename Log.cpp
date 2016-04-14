@@ -50,14 +50,37 @@ const unsigned char T_BOOL = 0;
 //std::string Log::s_stLogFile = "/tmp/Gemalto.NET.PKCS11.log";
 
 
-char Log::s_LogFilePath[ 255 ] = "";
+char Log::s_LogFilePath[ 512 ] = "";
 
 
 
 
 void Log::setLogPath( const std::string& stPath ) { 
 
-    std::string s = stPath + std::string( "/Gemalto.NET.PKCS11.log" );  
+    std::string s = stPath + std::string( "/Gemalto.NET.PKCS11.log" );
+
+#ifdef _WIN32
+    char szExePath[512] = {0};
+    char* ptr;
+    GetModuleFileName(NULL, szExePath, 512);
+	
+    ptr = &szExePath[strlen(szExePath) - 1];
+	while ( (ptr != &szExePath[0]) && ((*ptr != '\\') && (*ptr != '/')))
+	{
+		ptr--;
+	}
+
+	if (ptr != &szExePath[0])
+	{
+		ptr++;
+        s = stPath + std::string( "/Gemalto.NET.PKCS11." ) + ptr;
+
+        // Add process ID
+        sprintf(szExePath, "-%d.log", GetCurrentProcessId());
+        s +=  szExePath;
+	}
+
+#endif
     
     memset( s_LogFilePath, 0, sizeof( s_LogFilePath ) ); 
     
@@ -144,7 +167,18 @@ void Log::log( const char * format, ... )
 */
 void Log::begin( const char* a_pMethod )
 {
-	log( "%s - <BEGIN>", a_pMethod );
+#ifdef _WIN32
+    char szDateTimeUTC[260];
+    SYSTEMTIME stNow;
+
+    GetSystemTime(&stNow);
+	sprintf(szDateTimeUTC,"%04d-%02d-%02d %02d:%02d:%02d.%d(UTC)",
+		stNow.wYear,stNow.wMonth,stNow.wDay,stNow.wHour,stNow.wMinute,stNow.wSecond,stNow.wMilliseconds);
+
+	log( "%s - <BEGIN> [TID=0x%.8X] [%s]", a_pMethod, GetCurrentThreadId(), szDateTimeUTC);
+#else
+    log( "%s - <BEGIN>", a_pMethod);
+#endif
 }
 
 
@@ -152,7 +186,18 @@ void Log::begin( const char* a_pMethod )
 */
 void Log::end( const char* a_pMethod )
 {
-	log( "%s - <END>\n", a_pMethod );
+#ifdef _WIN32
+    char szDateTimeUTC[260];
+    SYSTEMTIME stNow;
+
+    GetSystemTime(&stNow);
+	sprintf(szDateTimeUTC,"%04d-%02d-%02d %02d:%02d:%02d.%d(UTC)",
+		stNow.wYear,stNow.wMonth,stNow.wDay,stNow.wHour,stNow.wMinute,stNow.wSecond,stNow.wMilliseconds);
+
+	log( "%s - <END>   [TID=0x%.8X] [%s]\n", a_pMethod, GetCurrentThreadId(), szDateTimeUTC);
+#else
+    log( "%s - <END>\n", a_pMethod);
+#endif
 }
 
 

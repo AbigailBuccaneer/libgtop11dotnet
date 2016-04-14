@@ -49,7 +49,7 @@ public:
 
 	/* =========== PKCS11 INTERFACE ===========  */
 
-    void finalize( void );
+    void finalize( bool bPcscValid );
 	
 	void getInfo( CK_SLOT_INFO_PTR );
 
@@ -61,7 +61,7 @@ public:
 
 	void initToken( CK_UTF8CHAR_PTR, const CK_ULONG&, CK_UTF8CHAR_PTR );
 
-	void closeAllSessions( void );
+	void closeAllSessions( bool bPcscValid = true );
 
 	void openSession( const CK_FLAGS&, CK_VOID_PTR, CK_NOTIFY, CK_SESSION_HANDLE_PTR );
 

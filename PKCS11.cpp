@@ -49,9 +49,23 @@ const CK_UTF8CHAR g_stLibraryDescription[ ] = "Gemalto .NET PKCS11";
 
 boost::mutex io_mutex;
 
-Application g_Application;
+Application* g_Application = NULL;
 
 CK_BBOOL g_isInitialized = FALSE;
+
+void pkcs11Initialization(void)
+{
+    g_Application = new Application;
+}
+
+void pkcs11Finalization(void)
+{
+    if (g_Application)
+    {
+        delete g_Application;
+        g_Application = NULL;
+    }
+}
 
 
 static const CK_FUNCTION_LIST FunctionList = {
@@ -107,7 +121,7 @@ extern "C"
                 */
             } else {
 
-                s = g_Application.getSlot( ulSlotID );
+                s = g_Application->getSlot( ulSlotID );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -177,7 +191,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlot( ulSlotID );
+                s = g_Application->getSlot( ulSlotID );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -274,15 +288,18 @@ extern "C"
 
             if ( CKR_OK == rv ) {
 
-                g_isInitialized = TRUE;
+                pkcs11Initialization();
 
-                g_Application.initialize( );
+                g_Application->initialize( );
+
+                g_isInitialized = TRUE;
             }
 
             Log::log( "C_Initialize - isInitialized <%#02x>", g_isInitialized );
 
         } catch( ... ) {
 
+            pkcs11Finalization();
             rv = CKR_GENERAL_ERROR;
         }
 
@@ -329,9 +346,10 @@ extern "C"
 
                 g_WaitForSlotEventCondition.notify_all( );
 
-                g_isInitialized = FALSE;
+                g_Application->finalize( );
+                pkcs11Finalization();
 
-                g_Application.finalize( );
+                g_isInitialized = FALSE;
             }
 
         } catch( ... ) {
@@ -453,7 +471,7 @@ extern "C"
 
             } else if( pulCount ) {
 
-                g_Application.getSlotList( tokenPresent, pSlotList, pulCount );
+                g_Application->getSlotList( tokenPresent, pSlotList, pulCount );
 
             } else {
 
@@ -508,7 +526,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlot( slotID );
+                s = g_Application->getSlot( slotID );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -572,7 +590,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlot( slotID );
+                s = g_Application->getSlot( slotID );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -648,7 +666,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlot( slotID );
+                s = g_Application->getSlot( slotID );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -724,7 +742,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlot( slotID );
+                s = g_Application->getSlot( slotID );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -800,7 +818,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlot( slotID );
+                s = g_Application->getSlot( slotID );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -872,7 +890,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -947,7 +965,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
                
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -1031,7 +1049,7 @@ extern "C"
 
             if( CKR_OK == rv ) {
 
-                s = g_Application.getSlot( slotID );
+                s = g_Application->getSlot( slotID );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -1103,7 +1121,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -1168,7 +1186,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlot( slotID );
+                s = g_Application->getSlot( slotID );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -1240,7 +1258,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -1317,7 +1335,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -1382,7 +1400,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
 
                 if( s.get( ) && s->m_Device.get( ) ) {
@@ -1457,7 +1475,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -1527,7 +1545,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -1601,7 +1619,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -1677,7 +1695,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -1750,7 +1768,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -1827,7 +1845,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -1895,7 +1913,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -1964,7 +1982,7 @@ extern "C"
 
             } else if( pMechanism ) {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -2043,7 +2061,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -2113,7 +2131,7 @@ extern "C"
 
             } else if( pMechanism ) {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -2192,7 +2210,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -2265,7 +2283,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -2340,7 +2358,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -2415,7 +2433,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -2489,7 +2507,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -2567,7 +2585,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -2645,7 +2663,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -2720,7 +2738,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -2793,7 +2811,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -2871,7 +2889,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -2948,7 +2966,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -3018,7 +3036,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -3085,7 +3103,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -3172,7 +3190,7 @@ extern "C"
 
             if( CKR_OK == rv ) {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -3246,7 +3264,7 @@ extern "C"
 
             } else {
 
-                s = g_Application.getSlotFromSession( hSession );
+                s = g_Application->getSlotFromSession( hSession );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
 
@@ -3320,7 +3338,7 @@ extern "C"
                 boost::mutex::scoped_lock lock( io_mutex );
 
                 // Search for a state change into the known slots
-                Application::ARRAY_SLOTS sl = g_Application.getSlotList( );
+                Application::ARRAY_SLOTS sl = g_Application->getSlotList( );
             
                 BOOST_FOREACH( const boost::shared_ptr< Slot >& s, sl ) {
 
@@ -3362,7 +3380,7 @@ extern "C"
                         boost::mutex::scoped_lock lock2( io_mutex );
 
                         // Search for a state change into the known slots
-                        Application::ARRAY_SLOTS as = g_Application.getSlotList( );
+                        Application::ARRAY_SLOTS as = g_Application->getSlotList( );
 
                         *pSlot = CK_UNAVAILABLE_INFORMATION;
 
@@ -3382,14 +3400,6 @@ extern "C"
                                  
                         rv = CKR_OK;
                     }
-                }
-                else {
-                    // Was awoken by a concurrent thread with C_Finalize?
-                    // if yes, return CKR_CRYPTOKI_NOT_INITIALIZED
-                    // to be PKCS#11 compliant
-
-                    if (!g_isInitialized )
-                        rv = CKR_CRYPTOKI_NOT_INITIALIZED;
                 }
             }
         }

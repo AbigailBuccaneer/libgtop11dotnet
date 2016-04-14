@@ -57,6 +57,8 @@ public:
     inline bool isSmartCardPresent( void ) { /*if( !m_MiniDriver.get( ) ) { return false; }*/ return ( ( m_DeviceState.dwCurrentState & SCARD_STATE_PRESENT ) ? true : false ); }
 
     inline bool isSmartCardMute( void ) { return ( ( m_DeviceState.dwCurrentState & SCARD_STATE_MUTE ) ? true : false ); }
+
+    inline bool isSmartCardRecognized( void ) { if ( m_MiniDriver.get( ) ) return true; else return false;}
         
     inline const SCARD_READERSTATE& getReaderState( void ) { return m_DeviceState; }
 

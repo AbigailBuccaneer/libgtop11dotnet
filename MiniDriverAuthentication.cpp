@@ -56,6 +56,7 @@ MiniDriverAuthentication::MiniDriverAuthentication( ) {
 
     m_ucTypePIN = PIN_TYPE_REGULAR;
 
+    m_CardModule = NULL;
     //Log::end( "MiniDriverAuthentication::MiniDriverAuthentication" );
 }
 
@@ -178,41 +179,64 @@ unsigned char MiniDriverAuthentication::howToAuthenticate( unsigned char bPinLen
     Log::log( "MiniDriverAuthentication::AuthenticateUser - Card mode <%ld> (1 = pin only ; 2 = fp only ; 3 = fp or pin ; 4 = fp and pin)", getPinMode( ) );
     Log::log( "MiniDriverAuthentication::AuthenticateUser - PIN len <%ld>", bPinLen );
 
-    if( isExternalPin( ) )
+    if(isExternalPin())
     {
-        if( isModePinOnly( ) )
+        if(isModePinOnly())
         {
-            if( m_SmartCardReader->isVerifyPinSecured( ) ) {
-
-                if( 0 == bPinLen ) {
-
+            // PIN pad reader
+            if( m_SmartCardReader->isVerifyPinSecured()) 
+            {
+                // Empty PIN -> PIN pad
+                if(0 == bPinLen) 
+                {
                     Log::log( "MiniDriverAuthentication::AuthenticateUser - External PIN && UVM1 && PINpad support && null len -> PIN pad" );
                     bRet = g_ucAuthenticateSecure;
-
-                } else {
-
+                } 
+                // PIN Value -> Normal mode
+                else 
+                {
                     Log::log( "MiniDriverAuthentication::AuthenticateUser - External PIN && UVM1 && PINpad support && valid len -> PIN normal" );
                     bRet = g_ucAuthenticateRegular;
-
                 }
-            } else {
+            } 
 
-                Log::log( "MiniDriverAuthentication::AuthenticateUser - External PIN && UVM1 && NO PINpad support -> ERROR !!!" );
-                bRet = g_ucAuthenticateError;
+            // Normal reader (No PIN pad)
+            else 
+            {
+                // PIN Value -> Normal mode
+                if(0 != bPinLen) 
+                {
+                    Log::log( "MiniDriverAuthentication::AuthenticateUser - External PIN && UVM1 && No PINpad support && valid len -> PIN normal" );
+                    bRet = g_ucAuthenticateRegular;
+                } 
+
+                // Empty PIN -> Error!
+                else
+                {
+                    Log::log( "MiniDriverAuthentication::AuthenticateUser - External PIN && UVM1 && NO PINpad support -> ERROR !!!" );
+                    bRet = g_ucAuthenticateError;
+                }
             }
-        } else {
+        } 
+        else 
+        {
 
             Log::log( "MiniDriverAuthentication::AuthenticateUser - External PIN && (UVM2 || UVM3 || UVM4) -> Bio" );
             bRet = g_AuthenticateBiometry;
         }
-    } else {
+    } 
+    else 
+    {
 
-        if( bPinLen && ( isModePinOnly( ) || isModePinOrBiometry( ) ) ) {
+        if( bPinLen && ( isModePinOnly( ) || isModePinOrBiometry( ) ) ) 
+        {
 
             Log::log( "MiniDriverAuthentication::AuthenticateUser - Regular PIN && (UVM1 || UVM3)  && valid len -> PIN normal" );
             bRet = g_ucAuthenticateRegular;
 
-        } else {
+        } 
+        else 
+        {
 
             Log::log( "MiniDriverAuthentication::AuthenticateUser - Regular PIN && (UVM2 || UVM4)  && NO valid len -> ERROR !!!" );
             bRet = g_ucAuthenticateError;

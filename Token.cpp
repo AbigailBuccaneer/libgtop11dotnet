@@ -446,7 +446,6 @@ void Token::createTokenInfo( void ) {
 }
 
 
-
 /*
 */
 /*
@@ -681,8 +680,13 @@ void Token::setTokenInfo( void )
             }
 
             // Check if the CKF_PROTECTED_AUTHENTICATION_PATH flag must be raised
-            if( m_Device->isExternalPin( ) || ( ( m_Device->isModePinOnly( ) && m_Device->isVerifyPinSecured( ) ) || m_Device->isModeNotPinOnly( ) ) ) {
-
+//            if( m_Device->isExternalPin( ) || ( ( m_Device->isModePinOnly( ) && m_Device->isVerifyPinSecured( ) ) || m_Device->isModeNotPinOnly( ) ) ) 
+            if(  (  (m_Device->isExternalPin()) 
+                  &&(m_Device->isVerifyPinSecured())
+                 )
+               ||(m_Device->isModeNotPinOnly())
+              ) 
+            {
                 Log::log( "Token::setTokenInfo - Enable CKF_PROTECTED_AUTHENTICATION_PATH" );
                 m_TokenInfo.flags  |= CKF_PROTECTED_AUTHENTICATION_PATH;
             }
@@ -727,7 +731,7 @@ void Token::setTokenInfo( void )
     m_TokenInfo.hardwareVersion.major  = 0;
     m_TokenInfo.hardwareVersion.minor  = 0;
 
-    // Set the version of Card Module application
+    // Set the version of Card Module applicaton
     m_TokenInfo.firmwareVersion.major  = 0;
     m_TokenInfo.firmwareVersion.minor  = 0;
 
@@ -3012,8 +3016,13 @@ void Token::initToken( Marshaller::u1Array* a_pinSO, Marshaller::u1Array* a_labe
     // actual authentication
     authenticateAdmin( a_pinSO );
 
-    try
-    {
+    try {
+
+        // Synchronize all private objects to delete them
+        synchronizePrivateDataObjects( );
+
+        synchronizePrivateKeyObjects( );
+
         // Destroy all the token objects present into the PKCS11 directory
         // Note that when the private key is destroyed the associated container is also deleted
         BOOST_FOREACH( const TOKEN_OBJECTS::value_type& o, m_Objects ) {
@@ -3280,10 +3289,7 @@ void Token::synchronizePrivateObjects( void ) {
     try {
 
         // Synchronization of the private objects is only possible is the user is logged in
-        
-        //========= TEST
         if( m_pSlot && !m_pSlot->isAuthenticated( ) ) {
-        //if( !m_Device->isAuthenticated( ) ) {
 
             return;
         }
@@ -3305,8 +3311,6 @@ void Token::synchronizePrivateObjects( void ) {
 
         m_bSynchronizeObjectsPrivate = true;
     }
-
-    //m_bSynchronizeObjectsPrivate = false;
 }
 
 
@@ -3603,7 +3607,6 @@ bool Token::checkSmartCardContent( void ) {
 
     std::string stContainerIndex = "";
     unsigned char ucKeySpec = MiniDriverContainer::KEYSPEC_EXCHANGE;
-    unsigned int uiKeySize = 0;
     std::string stPrefix = "";
     std::string stCertificateFileName = "";
     std::string stObjectPKCS11 = "";

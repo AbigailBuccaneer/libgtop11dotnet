@@ -370,8 +370,6 @@ Marshaller::u1Array* MiniDriver::getSerialNumber( void ) {
             Log::logCK_UTF8CHAR_PTR( "MiniDriver::getSerialNumber - Serial number", m_u1aSerialNumber->GetBuffer( ), m_u1aSerialNumber->GetLength( ) );
             
         } catch( MiniDriverException& ) {
-        
-            int i = 0;
         }
 
         //// Try first to load the serial number in a V2+ way
