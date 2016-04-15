@@ -23,9 +23,10 @@ make
 make install
 ```
 
-## LICENSE
+## License
 
 This source code is Copyright (C) Gemalto, and is available under the GNU Lesser General Public License.
+See the file `LGPL-2.1` for more information.
 The source code contains the notice:
 
 ```
@@ -46,6 +47,3 @@ You should have received a copy of the GNU Lesser General Public
 License along with this library; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ```
-
-However, it didn't come with a copy of the GNU Lesser General Public License, and so I don't actually know which version of the LGPL it's licensed under.
-Maybe I should write to the Free Software Foundation.
