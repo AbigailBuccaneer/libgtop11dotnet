@@ -25,7 +25,7 @@ make install
 
 ## License
 
-This source code is Copyright (C) Gemalto, and is available under the GNU Lesser General Public License.
+This source code is available under the GNU Lesser General Public License.
 See the file `LGPL-2.1` for more information.
 The source code contains the notice:
 
