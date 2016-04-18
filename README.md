@@ -14,7 +14,7 @@ If you have any more information about reputable sources off this source code, p
 This information is based on [this invaluable guide](https://stomp.colorado.edu/blog/blog/2014/06/02/on-building-the-gemalto-net-pkcs-11-module-for-linux/):
 
 ```
-sudo apt install libpcsclite1 libpcsclite-dev libboost-all-dev 
+sudo apt install git automake autoconf pkg-config zlib1g-dev libpcsclite1 libpcsclite-dev libboost-all-dev 
 git clone https://github.com/AbigailBuccaneer/libgtop11dotnet.git
 cd libgtop11dotnet
 ./autogen.sh
