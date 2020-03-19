@@ -31,6 +31,7 @@ git clone https://github.com/AbigailBuccaneer/libgtop11dotnet.git
 cd libgtop11dotnet
 ./autogen.sh
 ./configure --enable-system-boost
+(Change Makefile, see above)
 make
 sudo make install
 ```
