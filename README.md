@@ -3,6 +3,18 @@
 This repository contains the source code for the libgtop11dotnet library.
 It is a [PKCS #11](https://en.wikipedia.org/wiki/PKCS_11) module for [Gemalto IDPrime .NET](http://www.gemalto.com/products/dotnet_card/index.html) smart cards.
 
+This repo has some small fixed by me, to let it build on a recent Ubuntu 18 or 19. The general instructions below apply.
+After running configure make sure the following CXXFLAGS are added to the Makefile
+
+-std=c++03
+
+This version fixes a bug in the the memory handling when reading the available mechanisms from a Gemalto .NET 2.0 Smartcard.
+The calling application (i.e. opensc) sets the buffer size to 0 on the first call and expects a CRK_OK from the middleware to re-alloc the buffer of the proper size. However the Gemalto API returns a fatal error and not CRK_OK. By fixing this in PKCS11.cpp all use cases worked so far.
+
+Test:
+
+pkcs11-tool --module=/usr/local/lib/libgtop11dotnet.so -k --key-type rsa:2048 --id 1 --label "My big RSA key" --login
+
 This repository was created by importing the SVN repository from [smartcardservices.macosforge.org](https://svn.macosforge.org/repository/smartcardservices).
 That repository contains up to version 2.2.0.10 of the source code. Version 2.2.0.12 is available, but I've only been able to find it as a .tar.gz [on an unofficial website](https://www.nemid.nu/dk-da/support/aktiver_nemid/aktiver_nemid_paa_hardware/installer_driver/drivers/libgtop11dotnet_2.2.0.12.tar.gz).
 The code from that tarball is here as a single commit (tagged 2.2.0.12).
