@@ -33,7 +33,7 @@
 #include "Log.hpp"
 #include "PKCS11Exception.hpp"
 #include "version.hpp"
-
+#include <cstdio>
 
 boost::condition_variable g_WaitForSlotEventCondition;
 
@@ -643,7 +643,6 @@ extern "C"
     CK_DEFINE_FUNCTION( CK_RV, C_GetMechanismList )( CK_SLOT_ID slotID, CK_MECHANISM_TYPE_PTR pMechanismList, CK_ULONG_PTR pulCount ) {
 
         boost::mutex::scoped_lock lock( io_mutex );
-
         CK_RV rv = CKR_OK;
 
         Log::begin( "C_GetMechanismList" );
@@ -655,17 +654,14 @@ extern "C"
         boost::shared_ptr< Slot > s; 
 
         try {
-
             if( !g_isInitialized ) {
 
                 rv = CKR_CRYPTOKI_NOT_INITIALIZED;
 
             } else if( !pulCount ) {
-
                 rv = CKR_ARGUMENTS_BAD;
 
             } else {
-
                 s = g_Application->getSlot( slotID );
 
                 if( s.get( ) && s->m_Device.get( ) ) {
@@ -675,20 +671,18 @@ extern "C"
                         rv = CKR_TOKEN_NOT_PRESENT;
                     
                     } else {
-                        
                         s->m_Device->beginTransaction( );
-               
                         s->getMechanismList( pMechanismList, pulCount );
                     }
                 }
             }
 
         } catch( PKCS11Exception& x ) {
-
             rv = x.getError( );
+            // 20200319 md So far we've only seen BUFFER_TOO_SMALL exc. These we will replace with CKR_OK
+            rv = CKR_OK;
 
         } catch( ... ) {
-
             rv = CKR_GENERAL_ERROR;
         }
 
